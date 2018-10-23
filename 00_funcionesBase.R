@@ -148,10 +148,8 @@ vusVar <-function(f1x,f2x,f3x,alpha=0.05,NBOOT=50,type="emp")
   var0 <- var(res0,na.rm=T)
   prob0 <- alpha/2
   ###CI
-  #lower <- quantile(boot.VUS,prob=prob0)
-  lower<-puntual-(abs(qnorm(prob0))*sd(res0))
-  #upper <- quantile(boot.VUS,prob=1-prob0)
-  upper<-puntual+(abs(qnorm(prob0))*sd(res0))
+  lower <- quantile(boot.VUS,prob=prob0)
+  upper <- quantile(boot.VUS,prob=1-prob0)
   CI <- c(lower,upper);
   names(CI) <- c(paste(prob0*100,"%",sep=""),paste(100-prob0*100,"%",sep=""))
   return(list(variance=var0,CI=CI,estimate=puntual))
