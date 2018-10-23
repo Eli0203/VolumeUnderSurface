@@ -18,7 +18,7 @@ transformBoxCox<-function(ldata){
     }else{i=i}
   })
   
-  ######################################
+  ###################Likelihood function for lambda estimation###################
   likbox=function(h,data){
     x<-data[[1]];y<-data[[2]];z<-data[[3]]
      n<-length(x);m<-length(y);l<-length(z)
@@ -87,7 +87,18 @@ vusVar <-function(f1x,f2x,f3x,alpha=0.05,NBOOT=50,type="emp")
     d <- (mean(f3x)-mean(f2x))/sd(f3x)
     puntual<- integrate(f0,a=a,b=b,c=c,d=d,p=0,q=0,lower=-Inf,upper=Inf,subdivisions=10000000)$value
     }
-  
+  if(type=="kernel") {
+      bwf<-function(x){((4/(3*length(x)))^(1/5))*min(sd(x),IQR(x)/1.39)}
+      f1k<-density(f1x,bw=bwf(f1x))
+      f1k<-sample(f1k$x,length(f1x),prob=f1k$y,replace=F)
+      f2k<-density(f2x,bw=bwf(f2x))
+      #f2k<-sample(f2k$x,length(f2x),prob=f2k$y,replace=F)
+      f3k<-density(f3x,bw=bwf(f3x))
+      f3k<-sample(f3k$x,length(f3x),prob=f3k$y,replace=F)
+      f2k<-approxfun(f2k,yleft=0,yright = 0)
+      kernel_surface<-function(y){F_emp(f1k,y)*(1-F_emp(f3k,y))*f2k(y)}
+      puntual<-integrate(kernel_surface,lower=-Inf,upper=Inf,subdivisions = 1000,rel.tol = 0.0005)$value
+  }
   if(type=="emp"){
     lim_int<-function(p1){1-F_emp(f3x,F_emp(f1x,q_emp(f1x,p1)))}
     puntual <- pracma::integral2(roc_emp,0,1,0,lim_int)$Q}
@@ -114,7 +125,18 @@ vusVar <-function(f1x,f2x,f3x,alpha=0.05,NBOOT=50,type="emp")
       res0[i] <- integrate(f0,a=a,b=b,c=c,d=d,p=0,q=0,lower=-Inf,upper=Inf,subdivisions=10000000)$value
       
     }
- 
+    if(type=="kernel"){
+      bwf<-function(x){((4/(3*length(x)))^(1/5))*min(sd(x),IQR(x)/1.39)}
+      f1k<-density(x[,i],bw=bwf(x[,i]))
+      f1k<-sample(f1k$x,length(x[,i]),prob=f1k$y,replace=F)
+      f2k<-density(y[,i],bw=bwf(y[,i]))
+      f3k<-density(z[,i],bw=bwf(z[,i]))
+      f3k<-sample(f3k$x,length(z[,i]),prob=f3k$y,replace=F)
+      f2k<-approxfun(f2k,yleft=0,yright = 0)
+      kernel_surface<-function(y){F_emp(f1k,y)*(1-F_emp(f3k,y))*f2k(y)}
+      res0[i]<-integrate(kernel_surface,lower=-Inf,upper=Inf,subdivisions = 1000,rel.tol = 0.0005)$value
+      
+    }
     if(type=="emp"){
     
       lim_int<-function(p1){1-F_emp(z[,i],F_emp(x[,i],q_emp(x[,i],p1)))}
