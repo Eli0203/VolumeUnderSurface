@@ -48,7 +48,29 @@ transformBoxCox<-function(ldata){
   })
   return(result)
 }
-
+###############################################################
+#########Mean and variance for censured data###################
+###############################################################
+params_gupta<-function(cases,lod){
+  binormal.lik=function(theta,lod,y){
+    mu=theta[1]
+    sigma2=theta[2]
+    n=length(y)
+    z=y[y>lod]
+    k=length(z)
+    logl=-k*log(sqrt(sigma2))-1/(2*sigma2)*sum(z-mu)^2+(n-k)*log(pnorm((lod-mu)/sqrt(sigma2),0,1,lower.tail=TRUE))
+    return(-logl)
+  }
+  
+  ini1=mean(cases)
+  ini2=var(cases)
+  d=lod
+  kkx=optim(c(ini1,ini2),binormal.lik,lod=d,y=cases,method="Nelder-Mead")$par
+  mux=kkx[1]
+  sigmax=sqrt(kkx[2])
+  
+  return(list(mu=mux,sigma=sigmax))
+}
 #############################################################################
 ############EMPIRICAL METHOD################################################
 ####estimate function for empirical method####
@@ -61,12 +83,7 @@ roc_emp<-function(p3,p1){ F_emp(f2x,q_emp(f3x,1-p3))-F_emp(f2x,q_emp(f1x,p1))}
 #############################################################################
 ############NORMAL METHOD################################################
 ####APROX VUS FOR NORMAL DISTRIBUTION####
-lim_int_n<-function(p1){1-pnorm(qnorm(p1,mean(f1x),sd(f1x)),mean(f3x,na.rm=T),sd(f3x,na.rm=T))}
-####Normal ROC Surface
-roc_normal_est<-function(p3,p1){pnorm(qnorm(1-p3,mean(f3x,na.rm=T),sd(f3x,na.rm=T)),mean(f2x,na.rm=T),sd(f2x,na.rm=T))-
-    pnorm(qnorm(p1,mean(f1x,na.rm=T),sd(f1x,na.rm=T)),mean(f2x,na.rm=T),sd(f2x,na.rm=T))}
-
-
+### the paramas m_i and sd_i correspond to estimation of gupta for mean and varince respectively
 ##Article option
 f0 <- function(s,a,b,c,d,p,q)
 {
@@ -76,15 +93,19 @@ f0 <- function(s,a,b,c,d,p,q)
 
 #################################################################################
 #####VUS ESTIMATION####
-vusVar <-function(f1x,f2x,f3x,alpha=0.05,NBOOT=50,type="emp")
+vusVar <-function(f1x,f2x,f3x,alpha=0.05,NBOOT=50,type="emp",d=0)
 {
   ###puntual estimation
-  #f1x=x;f2x=y;f3x=z
   if(type=="normal"){
-    a <- sd(f2x)/sd(f1x)
-    b <- (mean(f1x)-mean(f2x))/sd(f1x)
-    c <- sd(f2x)/sd(f3x)
-    d <- (mean(f3x)-mean(f2x))/sd(f3x)
+    params_x<-params_gupta(f1x,d)
+    params_y<-params_gupta(f2x,d)
+    params_z<-params_gupta(f3x,d)
+    
+    a <- params_y[[2]]/params_x[[2]]
+    b <- (params_x[[1]]-params_y[[1]])/params_x[[2]]
+    c <- params_y[[2]]/params_z[[2]]
+    d <- (params_z[[1]]-params_y[[1]])/params_z[[2]]
+
     puntual<- integrate(f0,a=a,b=b,c=c,d=d,p=0,q=0,lower=-Inf,upper=Inf,subdivisions=10000000)$value
     }
   if(type=="kernel") {
@@ -103,7 +124,7 @@ vusVar <-function(f1x,f2x,f3x,alpha=0.05,NBOOT=50,type="emp")
     lim_int<-function(p1){1-F_emp(f3x,F_emp(f1x,q_emp(f1x,p1)))}
     puntual <- pracma::integral2(roc_emp,0,1,0,lim_int)$Q}
   
-  #boot.VUS <- sapply(1:NBOOT,function(jj){
+ 
   res0<-numeric(NBOOT)
   x<-matrix(NA,nrow=length(f1x)*2,ncol=NBOOT)
   y<-matrix(NA,nrow=length(f2x)*2,ncol=NBOOT)
@@ -113,15 +134,14 @@ vusVar <-function(f1x,f2x,f3x,alpha=0.05,NBOOT=50,type="emp")
   y[,i]<-sample(f2x,length(f2x)*2,replace=T);
   z[,i]<-sample(f3x,length(f3x)*2,replace=T);
   if(type=="normal"){
-     # lim_int_n<-function(p1){1-pnorm(pnorm(qnorm(p1,mean(x[,i],na.rm=T),
-      #                                            sd(x[,i],na.rm=T)),mean(x[,i],na.rm=T),sd(x[,i],na.rm=T)),
-          #                           mean(z[,i],na.rm=T),sd(z[,i],na.rm=T))}
-      #res0<-pracma::integral2(roc_normal_est,0,1,0,lim_int_n)$Q
-      ###params
-      a <- sd(y[,i])/sd(x[,i])
-      b <- (mean(x[,i])-mean(y[,i]))/sd(x[,i])
-      c <- sd(y[,i])/sd(z[,i])
-      d <- (mean(z[,i])-mean(y[,i]))/sd(z[,i])
+      params_x<-params_gupta(x[,i],d)
+      params_y<-params_gupta(y[,i],d)
+      params_z<-params_gupta(z[,i],d)
+      
+      a <- params_y[[2]]/params_x[[2]]
+      b <- (params_x[[1]]-params_y[[1]])/params_x[[2]]
+      c <- params_y[[2]]/params_z[[2]]
+      d <- (params_z[[1]]-params_y[[1]])/params_z[[2]]
       res0[i] <- integrate(f0,a=a,b=b,c=c,d=d,p=0,q=0,lower=-Inf,upper=Inf,subdivisions=10000000)$value
       
     }
@@ -148,8 +168,8 @@ vusVar <-function(f1x,f2x,f3x,alpha=0.05,NBOOT=50,type="emp")
   var0 <- var(res0,na.rm=T)
   prob0 <- alpha/2
   ###CI
-  lower <- quantile(boot.VUS,prob=prob0)
-  upper <- quantile(boot.VUS,prob=1-prob0)
+  lower<-puntual-(abs(qnorm(prob0))*sd(res0))
+  upper<-puntual+(abs(qnorm(prob0))*sd(res0))
   CI <- c(lower,upper);
   names(CI) <- c(paste(prob0*100,"%",sep=""),paste(100-prob0*100,"%",sep=""))
   return(list(variance=var0,CI=CI,estimate=puntual))
